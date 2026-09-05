@@ -1,0 +1,40 @@
+name: Set calendar duration to 2 hours
+
+on:
+  push:
+    paths:
+      - '.github/workflows/set-calendar-duration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make calendar events 2 hours long
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = "function icsEscape(s=''){return String(s).replace(/\\\\/g,'\\\\\\\\').replace(/;/g,'\\\\;').replace(/,/g,'\\\\,').replace(/\\n/g,'\\\\n')}function localStamp(date,time){return date.replace(/-/g,'')+'T'+time.replace(':','')+'00'}function addHour(time){const[h,m]=time.split(':').map(Number),t=(h*60+m+60)%1440;return String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}\nfunction makeICS(m){const body=['BEGIN:VCALENDAR','VERSION:2.0',`PRODID:-//${CONFIG.team}//Match Calendar//HU`,'CALSCALE:GREGORIAN','BEGIN:VEVENT',`UID:${m.id}-${m.date}@teamapp`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\\.\\d{3}/,'')}`,`DTSTART:${localStamp(m.date,m.time)}`,`DTEND:${localStamp(m.date,addHour(m.time))}`,`SUMMARY:${icsEscape(matchupText(m))}`,`DESCRIPTION:${icsEscape(CONFIG.subtitle+(m.arrive?' • Érkezés: '+m.arrive:''))}`,`LOCATION:${icsEscape(m.mapAddress||m.place||'')}`,'END:VEVENT','END:VCALENDAR'].join('\\r\\n');return URL.createObjectURL(new Blob([body],{type:'text/calendar;charset=utf-8'}))}"
+          new = "function icsEscape(s=''){return String(s).replace(/\\\\/g,'\\\\\\\\').replace(/;/g,'\\\\;').replace(/,/g,'\\\\,').replace(/\\n/g,'\\\\n')}function localStamp(date,time){return date.replace(/-/g,'')+'T'+time.replace(':','')+'00'}function addHoursLocalStamp(date,time,hours=2){const d=new Date(`${date}T${time}:00`);d.setHours(d.getHours()+hours);return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}00`}\nfunction makeICS(m){const body=['BEGIN:VCALENDAR','VERSION:2.0',`PRODID:-//${CONFIG.team}//Match Calendar//HU`,'CALSCALE:GREGORIAN','BEGIN:VEVENT',`UID:${m.id}-${m.date}@teamapp`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\\.\\d{3}/,'')}`,`DTSTART:${localStamp(m.date,m.time)}`,`DTEND:${addHoursLocalStamp(m.date,m.time,2)}`,`SUMMARY:${icsEscape(matchupText(m))}`,`DESCRIPTION:${icsEscape(CONFIG.subtitle+(m.arrive?' • Érkezés: '+m.arrive:''))}`,`LOCATION:${icsEscape(m.mapAddress||m.place||'')}`,'END:VEVENT','END:VCALENDAR'].join('\\r\\n');return URL.createObjectURL(new Blob([body],{type:'text/calendar;charset=utf-8'}))}"
+          if old not in s:
+              if 'addHoursLocalStamp' in s and 'DTEND:${addHoursLocalStamp(m.date,m.time,2)}' in s:
+                  print('Already patched')
+              else:
+                  raise SystemExit('Calendar code pattern not found')
+          else:
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit change
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Set calendar events to 2 hours"
+          git push
